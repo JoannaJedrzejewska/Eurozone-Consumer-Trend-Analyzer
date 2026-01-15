@@ -49,7 +49,7 @@ class MacroModule:
     inflation_uncertainty: Optional[float] = None #c4020
     econ_growth_12m: Optional[float] = None #e2010
     interest_rate_exp: Optional[float] = None  #e2020
-    unemployment_percept: Optional[float] = None
+    unemployment_percept: Optional[float] = None #c4031
 
 @dataclass
 class ConsumptionModule:
@@ -131,3 +131,4 @@ class CESObservation:
         if v <= 0:
             raise ValueError(f"survey_weight must be > 0, got {v}")
         return v
+
