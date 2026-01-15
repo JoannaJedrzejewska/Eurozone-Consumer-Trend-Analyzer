@@ -10,6 +10,9 @@ from engine import (
     WeightedMeanStrategy, PercentileStrategy, DescriptiveStatsStrategy
 )
 import plotext as plt
+import logging
+
+logging.getLogger("engine").setLevel(logging.ERROR)
 
 async def main():
     console = Console()
@@ -114,28 +117,44 @@ async def main():
                 console.print(f"[bold red]Error:[/bold red] No data found for '{date_query}'.")
 
         elif choice == "5":
-            strategy_choice = Prompt.ask("Strategy", choices=["1", "2", "3"])
-            if strategy_choice == "1":
-                strategy = GenericMeanStrategy(...)
-            elif strategy_choice == "2":
-                strategy = WeightedMeanStrategy()
-            elif strategy_choice == "3":
-                strategy = PercentileStrategy(percentile=0.75)
-
-            var_name = Prompt.ask("Variable (e.g., inflation, income, c2150_1, c1150_6)").lower()
-            path = gateway.VARIABLE_MAP.get(var_name, var_name)
+            console.print("[bold cyan]ADVANCED STRATEGIES[/bold cyan]")
+            console.print("1. [green]Generic Mean[/green] - Arithmetic average")
+            console.print("2. [yellow]Weighted Mean[/yellow] - Uses survey_weight")
+            console.print("3. [blue]75th Percentile[/blue] - Upper quartile")
             
-            with console.status(f"[bold magenta]Drawing graph..."):
-                x, y = await engine.get_time_series(data, path)
+            strategy_choice = Prompt.ask("\nSelect strategy", choices=["1", "2", "3"])
+            
+            console.print("Variables: inflation, income, spending, food, energy, job_loss...")
+            var_name = Prompt.ask("\nVariable (e.g., inflation, c4030)", console=console).lower()
+            path = gateway.VARIABLE_MAP.get(var_name, var_name)
+            console.print(f"'{var_name}' → '{path}'")
+            
+            if strategy_choice == "1":
+                strategy = GenericMeanStrategy(path)
+                console.print("[green]Generic Mean[/green]")
+            elif strategy_choice == "2":
+                strategy = WeightedMeanStrategy(path)
+                console.print("[yellow]Weighted Mean[/yellow]")
+            elif strategy_choice == "3":
+                strategy = PercentileStrategy(path, percentile=0.75)
+                console.print("[blue]75th Percentile[/blue]")
+            
+            with console.status(f"[bold magenta]Computing {strategy.__class__.__name__}..."):
+                result = await engine.run_analysis(data, strategy)
+            
+            console.print(f"[bold cyan]RESULT: {result:.2f}%[/bold cyan]")
+            
+            with console.status(f"[bold magenta]Drawing time series..."):
+                x, y = await engine.get_time_series(data, path, strategy)
             
             if not x or all(v == 0 for v in y):
-                console.print("[red]No data found for this variable in the dataset.[/red]")
+                console.print("[red]No data found![/red]")
                 continue
-
+            
             plt.clf()
             plt.date_form('Y-m')
             plt.plot(x, y, marker="dot", color="magenta")
-            plt.title(f"Trend for {var_name.upper()}")
+            plt.title(f"{strategy.__class__.__name__}: {var_name.upper()}")
             plt.show()
             
         elif choice == "6":
