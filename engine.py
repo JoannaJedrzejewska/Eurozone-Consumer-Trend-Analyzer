@@ -260,22 +260,25 @@ class AnalyticsEngine:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self.executor, DemographicsQualityStrategy().compute, data)
 
-    async def get_time_series(self, data: List[CESObservation], attr_path: str) -> tuple[List[str], List[float]]:
+    async def get_time_series(self, data: List[CESObservation], attr_path: str, 
+                         strategy: Optional[AnalysisStrategy] = None) -> tuple[List[str], List[float]]:
         loop = asyncio.get_running_loop()
         
-        def process():
+        def process(strategy):
             date_groups = defaultdict(list)
             for obs in data:
                 date_groups[obs.observation_date].append(obs)
             
             sorted_dates = sorted(date_groups.keys())
             x_axis, y_axis = [], []
-            strategy = GenericMeanStrategy(attr_path)
+            
+            if strategy is None:
+                strategy = GenericMeanStrategy(attr_path)
             
             for d in sorted_dates:
-                mean_val = strategy.compute(date_groups[d])
+                val = strategy.compute(date_groups[d])
                 x_axis.append(d.strftime("%Y-%m"))
-                y_axis.append(mean_val)
+                y_axis.append(val)
             return x_axis, y_axis
 
-        return await loop.run_in_executor(self.executor, process)
+        return await loop.run_in_executor(self.executor, process, strategy)
