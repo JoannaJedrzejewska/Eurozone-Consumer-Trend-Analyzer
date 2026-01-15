@@ -5,9 +5,11 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt, IntPrompt
 from gateway import CESDataGateway
-from engine import AnalyticsEngine, GenericMeanStrategy
+from engine import (
+    AnalyticsEngine, GenericMeanStrategy,
+    WeightedMeanStrategy, PercentileStrategy, DescriptiveStatsStrategy
+)
 import plotext as plt
-
 
 async def main():
     console = Console()
@@ -22,16 +24,17 @@ async def main():
     min_y, max_y = valid_years[0], valid_years[-1]
 
     while True:
-        console.print("\n[bold blue]Analytical Operations:[/bold blue]")
-        console.print("1. Global Economic Snapshot")
-        console.print("2. Yearly Inflation Trends")
-        console.print("3. Search by Variable & Year Range")
-        console.print("4. Deep-Dive Respondent ID")
+        console.print("1. [bold green]Global Economic Snapshot[/bold green]")
+        console.print("2. [bold purple4]Yearly Inflation Trends[/bold purple4]")
+        console.print("3. [bold black]Search by Variable & Year Range[/bold black]")
+        console.print("4. [bold dark_orange3]Deep-Dive Respondent ID[/bold dark_orange3]")
         console.print("5. [bold magenta]Generate Trend Graph[/bold magenta]")
-        console.print("6. [bold yellow]Data Quality (N/A) Report[/bold yellow]")
-        console.print("7. [bold red]Exit[/bold red]")
-        
-        choice = Prompt.ask("Action", choices=["1", "2", "3", "4", "5", "6", "7"])
+        console.print("6. [bold cyan]Advanced Analysis (Weighted/Percentile)[/bold cyan]")
+        console.print("7. [bold yellow]Data Quality (N/A) Report[/bold yellow]")
+        console.print("8. [bold red]Exit[/bold red]")
+
+        choice = Prompt.ask("Action", choices=["1", "2", "3", "4", "5", "6", "7", "8"])
+
 
         if choice == "1":
             summary_table = Table(title="Global Mean Values")
@@ -111,6 +114,14 @@ async def main():
                 console.print(f"[bold red]Error:[/bold red] No data found for '{date_query}'.")
 
         elif choice == "5":
+            strategy_choice = Prompt.ask("Strategy", choices=["1", "2", "3"])
+            if strategy_choice == "1":
+                strategy = GenericMeanStrategy(...)
+            elif strategy_choice == "2":
+                strategy = WeightedMeanStrategy()
+            elif strategy_choice == "3":
+                strategy = PercentileStrategy(percentile=0.75)
+
             var_name = Prompt.ask("Variable (e.g., inflation, income, c2150_1, c1150_6)").lower()
             path = gateway.VARIABLE_MAP.get(var_name, var_name)
             
@@ -128,6 +139,66 @@ async def main():
             plt.show()
             
         elif choice == "6":
+            console.print("\n[bold cyan]Advanced Analysis Menu:[/bold cyan]")
+            console.print("1. Weighted Mean (accounts for survey_weight)")
+            console.print("2. Percentile Analysis (median, quartiles)")
+            console.print("3. Descriptive Statistics (min/max/stdev)")
+            
+            analysis_type = Prompt.ask("Select analysis type", choices=["1", "2", "3"])
+            var_name = Prompt.ask("Enter Variable (e.g., c4030, inflation, macro.inflation_1y)").lower()
+            path = gateway.VARIABLE_MAP.get(var_name, var_name)
+            
+            if analysis_type == "1":
+                console.print("[bold yellow]Calculating Weighted Mean...[/bold yellow]")
+                strategy = WeightedMeanStrategy(path)
+                result = await engine.run_analysis(data, strategy)
+                console.print(Panel(
+                    f"Weighted Mean for [bold cyan]{var_name}[/bold cyan]: [bold green]{result:.4f}%[/bold green]\n"
+                    f"[dim](This accounts for survey weights - more representative of population)[/dim]",
+                    title="Weighted Mean Analysis"
+                ))
+            
+            elif analysis_type == "2":
+                percentile_choice = Prompt.ask(
+                    "Select percentile",
+                    choices=["25", "50", "75", "90"],
+                    default="50"
+                )
+                p_val = float(percentile_choice) / 100.0
+                console.print(f"[bold yellow]Calculating {percentile_choice}th Percentile...[/bold yellow]")
+                
+                strategy = PercentileStrategy(path, percentile=p_val)
+                result = await engine.run_analysis(data, strategy)
+                
+                percentile_names = {"25": "Q1 (1st Quartile)", "50": "Median", "75": "Q3 (3rd Quartile)", "90": "90th Percentile"}
+                console.print(Panel(
+                    f"{percentile_names[percentile_choice]} for [bold cyan]{var_name}[/bold cyan]: [bold green]{result:.4f}%[/bold green]\n"
+                    f"[dim](Less sensitive to outliers than mean)[/dim]",
+                    title=f"{percentile_choice}th Percentile Analysis"
+                ))
+            
+            elif analysis_type == "3":
+                console.print("[bold yellow]Calculating Descriptive Statistics...[/bold yellow]")
+                strategy = DescriptiveStatsStrategy(path)
+                stats = await engine.run_analysis(data, strategy)
+                
+                if stats["count"] > 0:
+                    stats_table = Table(title=f"Descriptive Statistics for {var_name}")
+                    stats_table.add_column("Metric", style="cyan")
+                    stats_table.add_column("Value", justify="right", style="bold green")
+                    
+                    stats_table.add_row("Minimum", f"{stats['min']:.4f}%")
+                    stats_table.add_row("Maximum", f"{stats['max']:.4f}%")
+                    stats_table.add_row("Mean", f"{stats['mean']:.4f}%")
+                    stats_table.add_row("Median", f"{stats['median']:.4f}%")
+                    stats_table.add_row("Std Dev", f"{stats['stdev']:.4f}%")
+                    stats_table.add_row("Count", str(stats['count']))
+                    
+                    console.print(stats_table)
+                else:
+                    console.print("[bold red]Error:[/bold red] No data found for this variable.")
+                    
+        elif choice == "7":
             quality_results = await engine.run_quality_report(data)
             table = Table(title="Personal Data Missingness (N/A) Report")
             table.add_column("Category", style="cyan")
@@ -139,7 +210,7 @@ async def main():
             console.print(table)
             console.print("[dim italic]*Higher percentages mean respondents chose not to answer personal questions that month.[/dim italic]")
 
-        elif choice == "7":
+        elif choice == "8":
             sys.exit()
 
 if __name__ == "__main__":
