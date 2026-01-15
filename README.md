@@ -1,8 +1,19 @@
 # Eurozone-Consumer-Trend-Analyzer
 
 
-
 **Advanced engine for Eurozone CES (Consumer Expectations Survey) data analysis.** Implements **SOLID principles**, **async processing**, **Pydantic validation**, and **16/16 unit tests**. Designed for econometric analysis of Central Bank consumer sentiment data.
+
+## Quick Start
+git clone https://github.com/JoannaJedrzejewska/Eurozone-Consumer-Trend-Analyzer
+cd Eurozone-Consumer-Trend-Analyzer
+pip install -r requirements.txt  
+
+# Test (16/16 expected)
+pytest test_system.py -v
+
+# Run
+python main.py
+
 
 ## Features
 
@@ -20,23 +31,12 @@
 
 ```mermaid
 graph TD
-    A[main.py CLI] --> B[AnalyticsEngine]
+    A[main.py **CLI**] --> B[AnalyticsEngine]
     B --> C[AnalysisStrategy Protocol]
     B --> D[GenericMeanStrategy]
     B --> E[WeightedMeanStrategy] 
     B --> F[PercentileStrategy]
     B --> G[DescriptiveStatsStrategy]
-    H[gateway.py **CSV**] --> I[CESObservation models.py]
+    H[gateway.py **CSV Parser**] --> I[CESObservation models.py]
     I --> C
-
-## Quick Start
-git clone https://github.com/JoannaJedrzejewska/Eurozone-Consumer-Trend-Analyzer
-cd Eurozone-Consumer-Trend-Analyzer
-pip install -r requirements.txt  
-
-# Test (16/16 expected)
-pytest test_system.py -v
-
-# Run
-python main.py
 
