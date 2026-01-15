@@ -27,6 +27,16 @@ python main.py
 | **Tests** | 100% coverage, edge cases, None handling |
 | **Logging** | Structured DEBUG/INFO/ERROR logs |
 
+##  File Structure
+
+| File | Purpose | Key Components |
+|------|---------|----------------|
+| **`models.py`** | **Pydantic data models + validation** | `CESObservation`, `MacroModule`, `LaborModule`, validators (date 2000-2030, `survey_weight>0`) |
+| **`gateway.py`** | **CSV data loader** | `CESDataGateway.load_all_data()` → `List[CESObservation]` |
+| **`engine.py`** | **Analysis engine + 6 strategies** | `AnalyticsEngine`, `AnalysisStrategy` Protocol, 5x strategies + `filter_by_date()` |
+| **`main.py`** | **Interactive CLI interface** | Rich menu (8 options), plotext charts, user input handling |
+| **`test_system.py`** | **16 comprehensive unit tests** | Pydantic validation, strategy calculations, edge cases, gateway parsing |
+
 ## Architecture Overview
 
 ```mermaid
