@@ -31,12 +31,12 @@ python main.py
 
 ```mermaid
 graph TD
-    A[main.py **CLI**] --> B[AnalyticsEngine]
+    A[main.py **CLI**] --> B[engine.py **AnalyticsEngine**]
     B --> C[AnalysisStrategy Protocol]
     B --> D[GenericMeanStrategy]
     B --> E[WeightedMeanStrategy] 
     B --> F[PercentileStrategy]
     B --> G[DescriptiveStatsStrategy]
-    H[gateway.py **CSV Parser**] --> I[CESObservation models.py]
-    I --> C
+    H[gateway.py **CSV Parser**] --> D[models.py **CESObservation**]
+    D --> B
 
