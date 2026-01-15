@@ -26,5 +26,17 @@ graph TD
     B --> E[WeightedMeanStrategy] 
     B --> F[PercentileStrategy]
     B --> G[DescriptiveStatsStrategy]
-    H[gateway.py CSV] --> I[CESObservation models.py]
+    H[gateway.py **CSV**] --> I[CESObservation models.py]
     I --> C
+
+## Quick Start
+git clone https://github.com/JoannaJedrzejewska/Eurozone-Consumer-Trend-Analyzer
+cd Eurozone-Consumer-Trend-Analyzer
+pip install -r requirements.txt  
+
+# Test (16/16 expected)
+pytest test_system.py -v
+
+# Run
+python main.py
+
