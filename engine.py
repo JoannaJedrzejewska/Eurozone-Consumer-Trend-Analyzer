@@ -3,6 +3,10 @@ from typing import List, Protocol, runtime_checkable, Optional
 from collections import defaultdict
 import asyncio
 from models import CESObservation
+import statistics
+import logging
+
+logger = logging.getLogger(__name__)
 
 @runtime_checkable
 class AnalysisStrategy(Protocol):
@@ -52,9 +56,153 @@ class DemographicsQualityStrategy:
 
         return {k: (v / total_records) * 100 for k, v in missing_counts.items()}
 
+class WeightedMeanStrategy:
+    """
+    Calculates weighted mean using survey_weight.
+    Useful for survey data where respondents have different population weights.
+    
+    Example:
+        If obs1 has inflation=2% and weight=1.5, and obs2 has inflation=4% and weight=1.0:
+        Result = (2*1.5 + 4*1.0) / (1.5 + 1.0) = 7/2.5 = 2.8%
+    """
+    def __init__(self, attr_path: str):
+        self.attr_path = attr_path
+    
+    def compute(self, data: List[CESObservation]) -> float:
+        """Returns: Weighted mean = sum(value * weight) / sum(weight)"""
+        total_weighted = 0.0
+        total_weight = 0.0
+        
+        for obs in data:
+            try:
+                temp_val = obs
+                for part in self.attr_path.split('.'):
+                    temp_val = getattr(temp_val, part)
+                val = temp_val
+            except (AttributeError, TypeError):
+                val = obs.sentiment_flags.get(self.attr_path)
+                if val is None:
+                    val = obs.sentiment_flags.get(f"{self.attr_path}_1")
+            
+            if isinstance(val, (int, float)) and val is not None:
+                total_weighted += val * obs.survey_weight
+                total_weight += obs.survey_weight
+        
+        logger.debug(f"WeightedMean: {self.attr_path} = {total_weighted}/{total_weight}")
+        return total_weighted / total_weight if total_weight > 0 else 0.0
+
+
+class PercentileStrategy:
+    """
+    Calculates percentile of values (e.g., 25th, 50th/median, 75th percentile).
+    Less sensitive to outliers than mean.
+    
+    Example:
+        Values: [1, 2, 3, 4, 5]
+        percentile=0.5 (median) → 3
+        percentile=0.25 (Q1) → 2
+        percentile=0.75 (Q3) → 4
+    """
+    def __init__(self, attr_path: str, percentile: float = 0.5):
+        """
+        Args:
+            attr_path: Path to attribute (e.g., "macro.inflation_1y")
+            percentile: Value between 0 and 1 (default: 0.5 = median)
+        """
+        self.attr_path = attr_path
+        self.percentile = max(0.0, min(1.0, percentile))  # Clamp to [0, 1]
+    
+    def compute(self, data: List[CESObservation]) -> float:
+        """Returns the percentile value."""
+        values = []
+        
+        for obs in data:
+            try:
+                temp_val = obs
+                for part in self.attr_path.split('.'):
+                    temp_val = getattr(temp_val, part)
+                val = temp_val
+            except (AttributeError, TypeError):
+                val = obs.sentiment_flags.get(self.attr_path)
+                if val is None:
+                    val = obs.sentiment_flags.get(f"{self.attr_path}_1")
+            
+            if isinstance(val, (int, float)) and val is not None:
+                values.append(val)
+        
+        if not values:
+            logger.warning(f"PercentileStrategy: No values found for {self.attr_path}")
+            return 0.0
+        
+        try:
+            import numpy as np
+            result = float(np.percentile(values, self.percentile * 100))
+        except (ImportError, Exception):
+            sorted_vals = sorted(values)
+            idx = int(len(sorted_vals) * self.percentile)
+            result = float(sorted_vals[min(idx, len(sorted_vals) - 1)])
+        
+        logger.debug(f"Percentile {self.percentile*100:.0f}: {self.attr_path} = {result}")
+        return result
+
+
+class DescriptiveStatsStrategy:
+    """
+    Returns comprehensive descriptive statistics.
+    
+    Returns dict with:
+        - min: minimum value
+        - max: maximum value
+        - mean: arithmetic mean
+        - median: 50th percentile
+        - stdev: standard deviation
+        - count: number of non-null values
+    """
+    def __init__(self, attr_path: str):
+        self.attr_path = attr_path
+    
+    def compute(self, data: List[CESObservation]) -> dict:
+        """Returns dict with full statistics."""
+        values = []
+        
+        for obs in data:
+            try:
+                temp_val = obs
+                for part in self.attr_path.split('.'):
+                    temp_val = getattr(temp_val, part)
+                val = temp_val
+            except (AttributeError, TypeError):
+                val = obs.sentiment_flags.get(self.attr_path)
+                if val is None:
+                    val = obs.sentiment_flags.get(f"{self.attr_path}_1")
+            
+            if isinstance(val, (int, float)) and val is not None:
+                values.append(val)
+        
+        if not values:
+            logger.warning(f"DescriptiveStats: No values found for {self.attr_path}")
+            return {
+                "min": None, "max": None, "mean": None,
+                "median": None, "stdev": None, "count": 0
+            }
+        
+        result = {
+            "min": min(values),
+            "max": max(values),
+            "mean": statistics.mean(values),
+            "median": statistics.median(values),
+            "stdev": statistics.stdev(values) if len(values) > 1 else 0.0,
+            "count": len(values)
+        }
+        
+        logger.debug(f"DescriptiveStats: {self.attr_path} = {result}")
+        return result
+
+
 class AnalyticsEngine:
     def __init__(self):
         self.executor = ThreadPoolExecutor(max_workers=4)
+        logger.info("AnalyticsEngine initialized with 4 worker threads")
 
     def get_available_years(self, data: List[CESObservation]) -> List[int]:
         return sorted(list(set(obj.observation_date.year for obj in data)))
@@ -63,8 +211,16 @@ class AnalyticsEngine:
         return [obj for obj in data if start_year <= obj.observation_date.year <= end_year]
 
     async def run_analysis(self, data: List[CESObservation], strategy: AnalysisStrategy) -> float:
+        strategy_name = strategy.__class__.__name__
+        logger.debug(f"Running analysis with strategy: {strategy_name}")
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self.executor, strategy.compute, data)
+        try:
+            result = await loop.run_in_executor(self.executor, strategy.compute, data)
+            logger.debug(f"Analysis completed: {strategy_name} returned {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Analysis failed: {str(e)}", exc_info=True)
+            raise
 
     async def get_yearly_report(self, data: List[CESObservation]) -> dict[int, float]:
         grouped = defaultdict(list)
@@ -83,7 +239,6 @@ class AnalyticsEngine:
         """
         search_str = search_str.lower().strip()
         
-        # Month name mapping
         months = {
             "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
             "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12
