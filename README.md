@@ -37,6 +37,6 @@ graph TD
     B --> E[WeightedMeanStrategy] 
     B --> F[PercentileStrategy]
     B --> G[DescriptiveStatsStrategy]
-    H[gateway.py **CSV Parser**] --> D[models.py **CESObservation**]
-    D --> B
+    H[gateway.py **CSV Parser**] --> B[engine.py **AnalyticsEngine**]
+    I[models.py **CESObservation**] -.->|used by| B
 
